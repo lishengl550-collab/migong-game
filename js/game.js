@@ -2514,7 +2514,8 @@ function rlLoadOneModel(key,retry){
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
     // 道具/结构件 GLB 可能用 MeshBasicMaterial（无光照、纯白剪影），统一修复为 PBR 并染色
-    if(RL_PROP_GLB[key]!==undefined)rlFixPropMaterials(gltf.scene);
+    // 用 try-catch 保护：材质修复失败不能阻断模型加载流程，否则 rlLoadOneModelDone 不执行会卡死加载队列
+    try{if(RL_PROP_GLB[key]!==undefined)rlFixPropMaterials(gltf.scene)}catch(err){console.warn('[GLB] 道具材质修复失败:',key,err&&err.message)}
     const box=new THREE.Box3().setFromObject(gltf.scene);
     gltf.scene.userData.bbox=box;
     gltf.scene.userData.size=box.getSize(new THREE.Vector3());
