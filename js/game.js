@@ -592,9 +592,8 @@ function normalOf(tex,strength){
 }
 // ===== 联网写实贴图（Poly Haven CC0 1K，CORS 开放）：加载成功后替换程序化贴图，失败则保留兜底 =====
 const PHB='https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/';
-// 资源路径：jsDelivr CDN 加速（英文名 GLB 可正常工作），失败自动回退相对路径
-const AST='https://cdn.jsdelivr.net/gh/lishengl550-collab/migong@main/';
-const AST_FB='';
+// 资源路径：纯相对路径（GitHub Pages 原生托管），稳定可靠
+const AST='';
 const pTexLoad=new THREE.TextureLoader();pTexLoad.setCrossOrigin('anonymous');
 const pcache={};
 function photo(url,rx,ry){
@@ -2493,10 +2492,9 @@ function rlPreloadTextures(){
   for(const k in rlTexPreload){
     const rel='assets/textures/fx/'+rlTexPreload[k]+'.png';
     const tryLoad=(retry)=>{
-      const base=retry>=1?AST_FB:AST;
-      ld.load(base+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
+      ld.load(AST+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
         if(retry<2){tryLoad(retry+1)}
-        else ld.load(AST_FB+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
+        else ld.load(AST+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
       });
     };tryLoad(0);
   }
@@ -2508,8 +2506,7 @@ function rlLoadOneModel(key,retry){
   const all=Object.assign({},RL_GLB,RL_PROP_GLB);
   if(all[key]===undefined){rlLoadOneModelDone(key);return;}
   const sub=(RL_GLB[key]!==undefined)?'':'dungeon/';
-  const base=retry>=1?AST_FB:AST;
-  const url=base+'assets/models/'+sub+all[key]+'.glb';
+  const url=AST+'assets/models/'+sub+all[key]+'.glb';
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
     const box=new THREE.Box3().setFromObject(gltf.scene);
@@ -2990,8 +2987,7 @@ function rlLoadWeaponModel(id,retry){
   const fn=RL_WEAPON_GLB[id];
   if(!fn||rlWeaponCache[id]){rlWeaponLoading[id]=false;return;}
   rlWeaponLoading[id]=true;
-  const base=retry>=1?AST_FB:AST;
-  const url=base+'assets/models/weapons/'+fn+'.glb';
+  const url=AST+'assets/models/weapons/'+fn+'.glb';
   new THREE.GLTFLoader().load(url,g=>{
     rlWeaponCache[id]=g.scene;rlWeaponLoading[id]=false;
     if(RL.active&&RL.bag[RL.slot]===id)rlBuildGun();
