@@ -592,10 +592,8 @@ function normalOf(tex,strength){
 }
 // ===== 联网写实贴图（Poly Haven CC0 1K，CORS 开放）：加载成功后替换程序化贴图，失败则保留兜底 =====
 const PHB='https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/';
-// jsDelivr CDN 加速 GitHub 仓库资源（模型/音频/贴图），比 GitHub Pages 快得多
-// 若 CDN 不稳定，自动回退到相对路径（GitHub Pages 原生托管）
-const AST='https://cdn.jsdelivr.net/gh/lishengl550-collab/migong@main/';
-const AST_FALLBACK='';
+// 资源路径：用相对路径（GitHub Pages 原生托管），CDN 对中文文件名 GLB 不稳定故不使用
+const AST='';
 const pTexLoad=new THREE.TextureLoader();pTexLoad.setCrossOrigin('anonymous');
 const pcache={};
 function photo(url,rx,ry){
@@ -2494,10 +2492,9 @@ function rlPreloadTextures(){
   for(const k in rlTexPreload){
     const rel='assets/textures/fx/'+rlTexPreload[k]+'.png';
     const tryLoad=(retry)=>{
-      const base=retry>=1?AST_FALLBACK:AST;
-      ld.load(base+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
-        if(retry<1)tryLoad(1);
-        else ld.load((retry>=1?AST_FALLBACK:AST)+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
+      ld.load(AST+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
+        if(retry<2){tryLoad(retry+1)}
+        else ld.load(AST+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
       });
     };tryLoad(0);
   }
@@ -2509,10 +2506,7 @@ function rlLoadOneModel(key,retry){
   const all=Object.assign({},RL_GLB,RL_PROP_GLB);
   if(all[key]===undefined){rlLoadOneModelDone(key);return;}
   const sub=(RL_GLB[key]!==undefined)?'':'dungeon/';
-  const relPath='assets/models/'+sub+all[key]+'.glb';
-  // 优先 CDN，失败回退到相对路径（GitHub Pages 原生托管），共重试 2 次
-  const useFallback=retry>=1;
-  const url=(useFallback?AST_FALLBACK:AST)+relPath;
+  const url=AST+'assets/models/'+sub+all[key]+'.glb';
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
     const box=new THREE.Box3().setFromObject(gltf.scene);
@@ -2521,10 +2515,8 @@ function rlLoadOneModel(key,retry){
     gltf.scene.userData.center=box.getCenter(new THREE.Vector3());
     rlOnModelReady(key);rlLoadOneModelDone(key);
   },undefined,e=>{
-    if(retry<2){
-      // CDN 失败 → 回退相对路径再试；相对路径也失败 → 再重试一次
-      setTimeout(()=>rlLoadOneModel(key,retry+1),300);
-    }else{
+    if(retry<2){setTimeout(()=>rlLoadOneModel(key,retry+1),400)}
+    else{
       rlModelFail[key]=true;console.warn('[GLB] 加载失败(已重试):',url,e&&e.message);
       const pend=rlPendingSwap[key];if(pend){for(const en of pend){if(!en.dead)en.pendingGlb=null}delete rlPendingSwap[key]}
       rlLoadOneModelDone(key);
@@ -2551,15 +2543,8 @@ function rlLoadModels(){
   rlModelsLoaded=true;
   if(!THREE.GLTFLoader){console.warn('[GLB] GLTFLoader 未加载');return}
   rlPreloadTextures();
-  const all=Object.assign({},RL_GLB,RL_PROP_GLB);
-  let done=0,total=Object.keys(all).length;
-  // 走限并发队列，避免一次性发起 50+ 请求被 CDN/服务器限流
-  for(const key in all){rlLoadQueuePush(key);}
-  const timer=setInterval(()=>{
-    const n=Object.keys(rlModelCache).length;
-    if(n>=total||(n===done&&done>0&&rlLoadQueue.length===0&&rlLoadActive===0)){done=n;clearInterval(timer);console.log('[GLB] 模型加载完成:',n,'/',total,Object.keys(rlModelFail).length?('失败:'+Object.keys(rlModelFail)):'')}
-    done=n;
-  },500);
+  // 按需加载：不预加载全部模型，只在怪物/道具出现时加载对应 GLB，避免一次性 50+ 请求卡死
+  console.log('[GLB] 贴图预载完成，模型将按需加载');
 }
 function rlGetModel(key){
   const src=rlModelCache[key];
@@ -3002,14 +2987,13 @@ function rlLoadWeaponModel(id,retry){
   const fn=RL_WEAPON_GLB[id];
   if(!fn||rlWeaponCache[id]){rlWeaponLoading[id]=false;return;}
   rlWeaponLoading[id]=true;
-  const useFallback=retry>=1;
-  const url=(useFallback?AST_FALLBACK:AST)+'assets/models/weapons/'+fn+'.glb';
+  const url=AST+'assets/models/weapons/'+fn+'.glb';
   new THREE.GLTFLoader().load(url,g=>{
     rlWeaponCache[id]=g.scene;rlWeaponLoading[id]=false;
     if(RL.active&&RL.bag[RL.slot]===id)rlBuildGun();
     if(gameMode!=='roguelike')setGunModel();
   },undefined,e=>{
-    if(retry<2){setTimeout(()=>rlLoadWeaponModel(id,retry+1),300)}
+    if(retry<2){setTimeout(()=>rlLoadWeaponModel(id,retry+1),400)}
     else{rlWeaponLoading[id]=false;console.warn('[GLB] 武器加载失败(已重试):',fn,e&&e.message)}
   });
 }
