@@ -593,7 +593,9 @@ function normalOf(tex,strength){
 // ===== 联网写实贴图（Poly Haven CC0 1K，CORS 开放）：加载成功后替换程序化贴图，失败则保留兜底 =====
 const PHB='https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/';
 // jsDelivr CDN 加速 GitHub 仓库资源（模型/音频/贴图），比 GitHub Pages 快得多
+// 若 CDN 不稳定，自动回退到相对路径（GitHub Pages 原生托管）
 const AST='https://cdn.jsdelivr.net/gh/lishengl550-collab/migong@main/';
+const AST_FALLBACK='';
 const pTexLoad=new THREE.TextureLoader();pTexLoad.setCrossOrigin('anonymous');
 const pcache={};
 function photo(url,rx,ry){
@@ -1240,7 +1242,7 @@ function escGlbPlace(key,x,z,ry,h,y){
 function glbProp(key,x,z,ry,h,y){
   if(rlModelCache[key]){escGlbPlace(key,x,z,ry,h,y);return}
   glbPropQueue.push({key,x,z,ry,h,y,gen:glbPropGen});
-  if(!rlModelLoading[key]&&!rlModelFail[key]){rlModelLoading[key]=true;rlLoadOneModel(key)}
+  if(!rlModelCache[key]&&!rlModelFail[key]){rlLoadQueuePush(key)}
   if(!glbPropPoll){glbPropPoll=1;
   const poll=n=>{setTimeout(()=>{
     const left=[];
@@ -2457,6 +2459,22 @@ const rlModelCache={};
 const rlModelAnim={};
 const rlModelFail={};
 let rlModelsLoaded=false;
+// 限并发加载队列：最多同时 4 个模型请求，避免 CDN/GitHub Pages 限流导致全部失败
+const rlLoadQueue=[];let rlLoadActive=0;const RL_LOAD_MAX_CONCURRENT=4;
+function rlLoadQueuePush(key){
+  // 已在缓存/已在加载/已失败 的跳过
+  if(rlModelCache[key]||rlModelLoading[key]||rlModelFail[key])return;
+  rlLoadQueue.push(key);rlLoadQueueDrain();
+}
+function rlLoadQueueDrain(){
+  while(rlLoadActive<RL_LOAD_MAX_CONCURRENT&&rlLoadQueue.length){
+    const key=rlLoadQueue.shift();
+    if(rlModelCache[key]||rlModelLoading[key]||rlModelFail[key])continue;
+    rlModelLoading[key]=true;rlLoadActive++;
+    rlLoadOneModel(key,0);
+  }
+}
+function rlLoadOneModelDone(key){rlLoadActive--;rlModelLoading[key]=false;rlLoadQueueDrain();}
 const RL_WEAPON_GLB={
   torch:null,k1:'铁锈短刀',k2:'断魂长刀',k3:'血纹双刃',k4:'绞魂链刃',k5:'弑神骨锯',
   g1:'老旧手枪',g2:'霰弹短铳',g3:'战术冲锋枪',g4:'猎魂步枪',g5:'湮灭重炮',
@@ -2474,31 +2492,44 @@ function rlPreloadTextures(){
   rlTexReady=true;
   const ld=new THREE.TextureLoader();
   for(const k in rlTexPreload){
-    ld.load(AST+'assets/textures/fx/'+rlTexPreload[k]+'.png',t=>{
-      t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;
-      rlParticleTex[k]=t;
-    },undefined,()=>{
-      ld.load(AST+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
-    });
+    const rel='assets/textures/fx/'+rlTexPreload[k]+'.png';
+    const tryLoad=(retry)=>{
+      const base=retry>=1?AST_FALLBACK:AST;
+      ld.load(base+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
+        if(retry<1)tryLoad(1);
+        else ld.load((retry>=1?AST_FALLBACK:AST)+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
+      });
+    };tryLoad(0);
   }
 }
-function rlLoadOneModel(key){
-  if(rlModelCache[key])return;
-  if(!THREE.GLTFLoader||!THREE.LoadingManager)return;
+function rlLoadOneModel(key,retry){
+  retry=retry||0;
+  if(rlModelCache[key]){rlLoadOneModelDone(key);return;}
+  if(!THREE.GLTFLoader||!THREE.LoadingManager){rlLoadOneModelDone(key);return;}
   const all=Object.assign({},RL_GLB,RL_PROP_GLB);
-  if(all[key]===undefined)return;
+  if(all[key]===undefined){rlLoadOneModelDone(key);return;}
   const sub=(RL_GLB[key]!==undefined)?'':'dungeon/';
-  const url=AST+'assets/models/'+sub+all[key]+'.glb';
+  const relPath='assets/models/'+sub+all[key]+'.glb';
+  // 优先 CDN，失败回退到相对路径（GitHub Pages 原生托管），共重试 2 次
+  const useFallback=retry>=1;
+  const url=(useFallback?AST_FALLBACK:AST)+relPath;
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
     const box=new THREE.Box3().setFromObject(gltf.scene);
     gltf.scene.userData.bbox=box;
     gltf.scene.userData.size=box.getSize(new THREE.Vector3());
     gltf.scene.userData.center=box.getCenter(new THREE.Vector3());
-    rlOnModelReady(key);
-  },undefined,e=>{rlModelFail[key]=true;console.warn('[GLB] 加载失败:',url,e&&e.message);
-    // 加载失败：释放等待该模型的占位怪，恢复其行动（仍用程序化模型，避免永远冻结卡关）
-    const pend=rlPendingSwap[key];if(pend){for(const en of pend){if(!en.dead)en.pendingGlb=null}delete rlPendingSwap[key]}});
+    rlOnModelReady(key);rlLoadOneModelDone(key);
+  },undefined,e=>{
+    if(retry<2){
+      // CDN 失败 → 回退相对路径再试；相对路径也失败 → 再重试一次
+      setTimeout(()=>rlLoadOneModel(key,retry+1),300);
+    }else{
+      rlModelFail[key]=true;console.warn('[GLB] 加载失败(已重试):',url,e&&e.message);
+      const pend=rlPendingSwap[key];if(pend){for(const en of pend){if(!en.dead)en.pendingGlb=null}delete rlPendingSwap[key]}
+      rlLoadOneModelDone(key);
+    }
+  });
 }
 // 模型迟到时，把已存在的占位怪物替换为真实模型，并补上房间结构/道具外观
 const rlPendingSwap={};
@@ -2522,10 +2553,11 @@ function rlLoadModels(){
   rlPreloadTextures();
   const all=Object.assign({},RL_GLB,RL_PROP_GLB);
   let done=0,total=Object.keys(all).length;
-  for(const key in all){rlLoadOneModel(key);}
+  // 走限并发队列，避免一次性发起 50+ 请求被 CDN/服务器限流
+  for(const key in all){rlLoadQueuePush(key);}
   const timer=setInterval(()=>{
     const n=Object.keys(rlModelCache).length;
-    if(n>=total||n===done&&done>0){done=n;clearInterval(timer);console.log('[GLB] 模型加载完成:',n,'/',total,Object.keys(rlModelFail).length?('失败:'+Object.keys(rlModelFail)):'')}
+    if(n>=total||(n===done&&done>0&&rlLoadQueue.length===0&&rlLoadActive===0)){done=n;clearInterval(timer);console.log('[GLB] 模型加载完成:',n,'/',total,Object.keys(rlModelFail).length?('失败:'+Object.keys(rlModelFail)):'')}
     done=n;
   },500);
 }
@@ -2633,7 +2665,7 @@ function rlTryGlb(key,targetH){
 }
 // 模型迟到：把占位怪物原地替换成真实 GLB 模型
 function rlSwapEnemyModel(e,key){
-  if(!rlModelCache[key]){rlLoadOneModel(key);return}
+  if(!rlModelCache[key]){rlLoadQueuePush(key);return}
   const m=rlTryGlb(key,RL_GLB_HEIGHT[key]||2);if(!m)return;
   const old=e.g;
   const g=m.g;e.baseY=g.position.y||0;
@@ -2718,7 +2750,7 @@ function rlAddEnemy(kind,x,z,bk){
   {
     const gkey=type==='boss'?(bk==='rot'?'rot':bk==='brood'?'brood':bk==='jailer'?'jailer':bk==='bloodmoon'?'bloodmoon':'void'):type;
     if(!m.glb&&rlModelCache[gkey]===undefined){
-      e.pendingGlb=gkey;(rlPendingSwap[gkey]=rlPendingSwap[gkey]||[]).push(e);rlLoadOneModel(gkey);
+      e.pendingGlb=gkey;(rlPendingSwap[gkey]=rlPendingSwap[gkey]||[]).push(e);rlLoadQueuePush(gkey);
     }
   }
   if(type==='boss'){e.boss=true;RL.boss=e;RL.bossSpawned=true;rlPlayBgm('boss')}
@@ -2965,15 +2997,21 @@ const RL_WEAPON_TUNE={
   r1:{ry:Math.PI},r2:{},r3:{ry:Math.PI/6},r4:{},r5:{ax:Math.PI/2}
 };
 const rlWeaponLoading={};
-function rlLoadWeaponModel(id){
+function rlLoadWeaponModel(id,retry){
+  retry=retry||0;
   const fn=RL_WEAPON_GLB[id];
-  if(!fn||rlWeaponCache[id]||rlWeaponLoading[id])return;
+  if(!fn||rlWeaponCache[id]){rlWeaponLoading[id]=false;return;}
   rlWeaponLoading[id]=true;
-  new THREE.GLTFLoader().load(AST+'assets/models/weapons/'+fn+'.glb',g=>{
+  const useFallback=retry>=1;
+  const url=(useFallback?AST_FALLBACK:AST)+'assets/models/weapons/'+fn+'.glb';
+  new THREE.GLTFLoader().load(url,g=>{
     rlWeaponCache[id]=g.scene;rlWeaponLoading[id]=false;
     if(RL.active&&RL.bag[RL.slot]===id)rlBuildGun();
-    if(gameMode!=='roguelike')setGunModel(); // 经典模式：GLB 到位后替换程序化占位枪模
-  },undefined,e=>{rlWeaponLoading[id]=false;console.warn('[GLB] 武器加载失败:',fn,e&&e.message)});
+    if(gameMode!=='roguelike')setGunModel();
+  },undefined,e=>{
+    if(retry<2){setTimeout(()=>rlLoadWeaponModel(id,retry+1),300)}
+    else{rlWeaponLoading[id]=false;console.warn('[GLB] 武器加载失败(已重试):',fn,e&&e.message)}
+  });
 }
 function rlMakeWeaponGlb(id,w){
   const src=rlWeaponCache[id];if(!src)return null;
