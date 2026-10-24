@@ -317,7 +317,7 @@ function tickAbyssMon(dt){
   const m=abyssMon;if(!m)return;if(m.dead){m.rt-=dt;if(m.rt<=0&&diff==='hard')spawnAbyssMon();return}m.grace-=dt;m.stun-=dt;m.hitF-=dt;m.rage=m.stun>0?0:(m.rage||0)+dt;
   const dx=P.x-m.x,dz=P.z-m.z,d=Math.hypot(dx,dz);
   if(m.grace<=0&&m.stun<=0){m.pt-=dt;if(m.pt<=0){m.pt=CFG[diff].pi||.25;m.next=nextStepFor(m)}const tx=m.next?(m.next[0]+.5)*T:P.x,tz=m.next?(m.next[1]+.5)*T:P.z,ax=tx-m.x,az=tz-m.z,al=Math.hypot(ax,az)||1;const sp=(Math.min(CFG[diff].sp+.15*got,CFG[diff].cap)+Math.min(m.rage,12)*(CFG[diff].rg||0))*(d<12?CFG[diff].near:1)+speedBonus;m.x+=ax/al*sp*dt;m.z+=az/al*sp*dt;}
-  const now=performance.now();m.g.position.set(m.x,Math.sin(now/180)*.08,m.z);if(d>.01)m.g.rotation.y=Math.atan2(dx,dz);m.g.rotation.z=m.stun>0?Math.sin(now/60)*.2:0;m.body.rotation.z=Math.sin(now/220)*.1;m.mat.emissive.setHex(m.hitF>0?0xffffff:0);m.eye.color.setHex(m.stun>0?0x555555:0xff3b3b);
+  const now=performance.now();m.g.position.set(m.x,Math.sin(now/180)*.08,m.z);if(d>.01)m.g.rotation.y=Math.atan2(dx,dz);m.g.rotation.z=m.stun>0?Math.sin(now/60)*.2:0;m.body.rotation.z=Math.sin(now/220)*.1;m.mat.emissive.setHex(0);m.eye.color.setHex(m.stun>0?0x555555:0xff3b3b);
   if(d<(CFG[diff].rd||1.05)&&m.stun<=0&&m.grace<=0){running=false;joyEnd();document.exitPointerLock&&document.exitPointerLock();$('vig').style.opacity=0;scare(true)}
 }
 function nextStep(){
@@ -374,7 +374,7 @@ function tick(dt){
   if(d>.01)mon.g.rotation.y=Math.atan2(dx,dz);
   mon.g.rotation.z=mon.stun>0?Math.sin(now/60)*.2:0;
   mon.body.rotation.z=Math.sin(now/220)*.1;
-  mon.mat.emissive.setHex(mon.hitF>0?0xffffff:0);
+  mon.mat.emissive.setHex(0);
   mon.eye.color.setHex(mon.stun>0?0x555555:0xff3b3b);
   const cl=mon.grace>0?0:clamp(1-d/18,0,1);
   $('vig').style.opacity=cl*.9;hb=0;
@@ -608,7 +608,10 @@ function photo(url,rx,ry){
 }
 function usePBR(mat,dUrl,nUrl,rUrl,rx,ry){
   const bind=(slot,url,extra)=>{const t=photo(url,rx,ry),f=x=>{mat[slot]=x;if(extra)extra();mat.needsUpdate=true};if(t.ready)f(t);else t.cbs.push(f)};
-  bind('map',dUrl);bind('normalMap',nUrl,()=>{mat.normalScale=new THREE.Vector2(1,1)});bind('roughnessMap',rUrl);
+  // 只在贴图就绪后才替换，未就绪时保留 pbrMat 传入的兜底贴图（wallTex/floorTex）
+  const fmap=x=>{mat.map=x;mat.needsUpdate=true};
+  const tmap=photo(dUrl,rx,ry);if(tmap.ready)fmap(tmap);else tmap.cbs.push(fmap);
+  bind('normalMap',nUrl,()=>{mat.normalScale=new THREE.Vector2(1,1)});bind('roughnessMap',rUrl);
 }
 // Poly Haven PBR 贴图集：albedo + normal + roughness
 const PSET={
@@ -3468,7 +3471,7 @@ function rlTick(dt){
     if(e.burnT>0){e.burnT-=dt;e._burnTick=(e._burnTick||0)-dt;if(e._burnTick<=0){e._burnTick=.55;rlHurt(e,e.burnDmg||0,false,0xff6a2a);rlFxRing(e.x,.45,e.z,.35,0xff4b18,.35)}}
     if(e.corrodeT>0){e.corrodeT-=dt;e._corTick=(e._corTick||0)-dt;if(e._corTick<=0){e._corTick=.7;rlHurt(e,e.corrodeDmg||0,false,0x7dff6a);rlFxRing(e.x,.5,e.z,.42,0x75ff55,.4)}}
     if(e.riseT>0){e.riseT-=dt;e.g.position.y=-1.4*(e.riseT/1.4);continue}
-    if(e.hitT>0){for(let i=0;i<e.mats.length;i++){const mm=e.mats[i];if(mm&&mm.emissive){mm.emissive.setHex(0xffffff);mm.emissiveIntensity=1.2}}}
+    if(e.hitT>0){/* 命中不变白，保持原色 */}
     else{for(let i=0;i<e.mats.length;i++){const mm=e.mats[i];if(mm&&mm.emissive&&e.emis0[i]!=null){mm.emissive.setHex(e.emis0[i]);mm.emissiveIntensity=(e.emis0I[i]||0)}}}
     if(e.kbX||e.kbZ){
       if(!rlMoveEnemy(e,e.x+e.kbX*dt,e.z+e.kbZ*dt)){e.kbX*=.3;e.kbZ*=.3}
