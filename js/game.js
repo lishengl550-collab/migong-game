@@ -592,6 +592,8 @@ function normalOf(tex,strength){
 }
 // ===== 联网写实贴图（Poly Haven CC0 1K，CORS 开放）：加载成功后替换程序化贴图，失败则保留兜底 =====
 const PHB='https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/';
+// jsDelivr CDN 加速 GitHub 仓库资源（模型/音频/贴图），比 GitHub Pages 快得多
+const AST='https://cdn.jsdelivr.net/gh/lishengl550-collab/migong@main/';
 const pTexLoad=new THREE.TextureLoader();pTexLoad.setCrossOrigin('anonymous');
 const pcache={};
 function photo(url,rx,ry){
@@ -1432,18 +1434,18 @@ const RL={
 let rlGroup=null,rlReady=false,shotSeq=0;
 // 音效资源映射（CC0 Kenney 音效包），加载失败时回退到 WebAudio 合成
 const RL_SFX_MAP={
-  click:'assets/audio/interface-sounds/Audio/click_001.ogg',
-  pick:'assets/audio/interface-sounds/Audio/confirmation_001.ogg',
-  buy:'assets/audio/interface-sounds/Audio/confirmation_002.ogg',
-  slash:'assets/audio/rpg-audio/Audio/knifeSlice.ogg',
-  shoot:'assets/audio/digital-audio/Audio/laser1.ogg',
-  hit:'assets/audio/impact-sounds/Audio/impactPunch_medium_000.ogg',
-  hurt:'assets/audio/impact-sounds/Audio/impactWood_medium_000.ogg',
-  kill:'assets/audio/rpg-audio/Audio/knifeSlice2.ogg',
-  dodge:'assets/audio/digital-audio/Audio/phaseJump1.ogg',
-  win:'assets/audio/interface-sounds/Audio/confirmation_003.ogg',
-  dead:'assets/audio/digital-audio/Audio/lowThreeTone.ogg',
-  warn:'assets/audio/digital-audio/Audio/lowRandom.ogg'
+  click:AST+'assets/audio/interface-sounds/Audio/click_001.ogg',
+  pick:AST+'assets/audio/interface-sounds/Audio/confirmation_001.ogg',
+  buy:AST+'assets/audio/interface-sounds/Audio/confirmation_002.ogg',
+  slash:AST+'assets/audio/rpg-audio/Audio/knifeSlice.ogg',
+  shoot:AST+'assets/audio/digital-audio/Audio/laser1.ogg',
+  hit:AST+'assets/audio/impact-sounds/Audio/impactPunch_medium_000.ogg',
+  hurt:AST+'assets/audio/impact-sounds/Audio/impactWood_medium_000.ogg',
+  kill:AST+'assets/audio/rpg-audio/Audio/knifeSlice2.ogg',
+  dodge:AST+'assets/audio/digital-audio/Audio/phaseJump1.ogg',
+  win:AST+'assets/audio/interface-sounds/Audio/confirmation_003.ogg',
+  dead:AST+'assets/audio/digital-audio/Audio/lowThreeTone.ogg',
+  warn:AST+'assets/audio/digital-audio/Audio/lowRandom.ogg'
 };
 const RL_SFX_BUF={};
 function rlLoadSfx(){
@@ -1455,7 +1457,7 @@ function rlLoadSfx(){
   }
 }
 // 肉鸽模式 BGM（CC0 暗黑氛围乐），循环播放，BOSS 战切换
-const RL_BGM_SRC={explore:'assets/audio/bgm/explore.ogg',boss:'assets/audio/bgm/boss.ogg'};
+const RL_BGM_SRC={explore:AST+'assets/audio/bgm/explore.ogg',boss:AST+'assets/audio/bgm/boss.ogg'};
 let rlBgm={src:null,gain:null,cur:null};
 function rlPlayBgm(name){
   if(!RL_BGM_SRC[name]||rlBgm.cur===name)return;
@@ -2472,11 +2474,11 @@ function rlPreloadTextures(){
   rlTexReady=true;
   const ld=new THREE.TextureLoader();
   for(const k in rlTexPreload){
-    ld.load('assets/textures/fx/'+rlTexPreload[k]+'.png',t=>{
+    ld.load(AST+'assets/textures/fx/'+rlTexPreload[k]+'.png',t=>{
       t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;
       rlParticleTex[k]=t;
     },undefined,()=>{
-      ld.load('assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
+      ld.load(AST+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
     });
   }
 }
@@ -2486,7 +2488,7 @@ function rlLoadOneModel(key){
   const all=Object.assign({},RL_GLB,RL_PROP_GLB);
   if(all[key]===undefined)return;
   const sub=(RL_GLB[key]!==undefined)?'':'dungeon/';
-  const url='assets/models/'+sub+all[key]+'.glb';
+  const url=AST+'assets/models/'+sub+all[key]+'.glb';
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
     const box=new THREE.Box3().setFromObject(gltf.scene);
@@ -2967,7 +2969,7 @@ function rlLoadWeaponModel(id){
   const fn=RL_WEAPON_GLB[id];
   if(!fn||rlWeaponCache[id]||rlWeaponLoading[id])return;
   rlWeaponLoading[id]=true;
-  new THREE.GLTFLoader().load('assets/models/weapons/'+fn+'.glb',g=>{
+  new THREE.GLTFLoader().load(AST+'assets/models/weapons/'+fn+'.glb',g=>{
     rlWeaponCache[id]=g.scene;rlWeaponLoading[id]=false;
     if(RL.active&&RL.bag[RL.slot]===id)rlBuildGun();
     if(gameMode!=='roguelike')setGunModel(); // 经典模式：GLB 到位后替换程序化占位枪模
