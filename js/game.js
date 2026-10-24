@@ -140,7 +140,6 @@ function farthest(){
 }
 function build(){
   diff=mode==='puzzle'?'free':edif;fireHeld=false;setGunModel();preEnv();
-  streamProps=[];streamTickAcc=0;
   skyG.visible=true;if(rlGroup)rlGroup.visible=false;if(rlGun)rlGun.visible=false;gun.visible=true;RL.active=false;speedBonus=0;
   if(group)scene.remove(group);
   group=new THREE.Group();scene.add(group);maze=mode==='puzzle'?(mazes=genP())[0]:gen();
@@ -1228,36 +1227,27 @@ function escDecor(walls,floors){
 /* ===== GLB 道具摆放（异步加载队列）：模型未就位时排队，加载完成后自动补上 ===== */
 const rlModelLoading={};
 let glbPropQueue=[],glbPropGen=0,glbPropPoll=0;
-// 流式加载列表：GLB 道具按距离玩家远近决定是否加载，减少初始下载量
-let streamProps=[];let streamTickAcc=0;
 function escGlbPlace(key,x,z,ry,h,y){
   const src=rlModelCache[key];if(!src)return false;
   const c=(THREE.SkeletonUtils&&THREE.SkeletonUtils.clone)?THREE.SkeletonUtils.clone(src):src.clone(true);
   const b=new THREE.Box3().setFromObject(c);const sz=b.getSize(new THREE.Vector3());
-  if(!isFinite(sz.y)||sz.y<.01)return null;
+  if(!isFinite(sz.y)||sz.y<.01)return true;
   const s=h/sz.y;c.scale.setScalar(s);
   c.position.set(x-b.getCenter(new THREE.Vector3()).x*s,(y||0)-b.min.y*s,z-b.getCenter(new THREE.Vector3()).z*s);
   c.rotation.y=ry||0;c.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false}});
-  group.add(c);return c;
+  group.add(c);return true;
 }
 function glbProp(key,x,z,ry,h,y){
-  // 加入流式列表，由 rlStreamTick 按玩家距离决定何时加载
-  streamProps.push({key,x,z,ry,h,y,loaded:false,obj:null});
-}
-// 每 0.5 秒检查一次：玩家附近 28m 内的道具加载 GLB 并显示，远处的隐藏
-function rlStreamTick(dt){
-  streamTickAcc+=dt;if(streamTickAcc<.5)return;streamTickAcc=0;
-  if(!P)return;
-  const px=P.x,pz=P.z,LOAD_R=28,HIDE_R=45;
-  for(const p of streamProps){
-    const d=Math.hypot(p.x-px,p.z-pz);
-    if(d<LOAD_R){
-      if(!p.loaded){
-        if(rlModelCache[p.key]){const c=escGlbPlace(p.key,p.x,p.z,p.ry,p.h,p.y);if(c)p.obj=c;p.loaded=true}
-        else if(!rlModelFail[p.key]){rlLoadQueuePush(p.key)}
-      }else if(p.obj){p.obj.visible=true}
-    }else if(d>HIDE_R&&p.obj){p.obj.visible=false}
-  }
+  if(rlModelCache[key]){escGlbPlace(key,x,z,ry,h,y);return}
+  glbPropQueue.push({key,x,z,ry,h,y,gen:glbPropGen});
+  if(!rlModelCache[key]&&!rlModelFail[key]){rlLoadQueuePush(key)}
+  if(!glbPropPoll){glbPropPoll=1;
+  const poll=n=>{setTimeout(()=>{
+    const left=[];
+    for(const q of glbPropQueue){if(q.gen!==glbPropGen)continue;if(rlModelCache[q.key])escGlbPlace(q.key,q.x,q.z,q.ry,q.h,q.y);else if(!rlModelFail[q.key])left.push(q)}
+    glbPropQueue=left;
+    if(left.length&&n<5)poll(n+1);else glbPropPoll=0;
+  },2200)};poll(0)}
 }
 /* ===== 逃脱模式难度主题：白给=茂密明亮的阳光森林，难度越高越阴暗恐怖 ===== */
 function escThemeDecor(walls,floors){
@@ -3764,7 +3754,6 @@ function loop(){
     const l=Math.hypot(tx,tz)||1;if(l>1){tx/=l;tz/=l}
     const k=1-Math.exp(-14*dt);vel.x+=(tx*sp-vel.x)*k;vel.z+=(tz*sp-vel.z)*k;
     P.x+=vel.x*dt;P.z+=vel.z*dt;resolve();mode==='puzzle'?ptick(dt):(gameMode==='roguelike'?rlTick(dt):tick(dt));
-    if(gameMode!=='roguelike')rlStreamTick(dt);
     bob+=Math.hypot(vel.x,vel.z)*dt*2.2;
     if(gameMode!=='roguelike'){
     const ci=P.x/T,cj=P.z/T;
