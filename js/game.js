@@ -1902,6 +1902,7 @@ function rlBuildShell(th,rooms,gates){
   }
   RL.wallFaces=faces;
   const wallModel=rlModelCache.modwall;
+  if(!wallModel&&!rlModelFail.modwall){rlLoadQueuePush('modwall')}
   if(wallModel){
     const wb=new Map();
     const mA=rlGetModel('modwall'),mB=rlGetModel('modwindow'),mC=rlGetModel('modtorch'),mD=rlGetModel('modarch');
@@ -1918,8 +1919,8 @@ function rlBuildShell(th,rooms,gates){
     }
     rlMergeFlush(wb,sh,tint);
   }else{
-    // 模型未加载时的兜底墙体
-    const wb=new Map(),fmat2=new THREE.MeshStandardMaterial({color:0x8a8074,roughness:.95,metalness:.02});
+    // 模型未加载时的兜底墙体：用程序化砖纹纹理，非纯色
+    const wb=new Map(),fmat2=pbrMat('wall',1,2,{color:0x9a9084,roughness:.95,metalness:.02});
     for(const f of faces){
       const box=new THREE.Mesh(new THREE.BoxGeometry(T,1,.5),fmat2);
       const fc=rlWallFallbackCenter(f);
@@ -2512,6 +2513,8 @@ function rlLoadOneModel(key,retry){
   const url=AST+'assets/models/'+sub+all[key]+'.glb';
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
+    // 道具/结构件 GLB 可能用 MeshBasicMaterial（无光照、纯白剪影），统一修复为 PBR 并染色
+    if(RL_PROP_GLB[key]!==undefined)rlFixPropMaterials(gltf.scene);
     const box=new THREE.Box3().setFromObject(gltf.scene);
     gltf.scene.userData.bbox=box;
     gltf.scene.userData.size=box.getSize(new THREE.Vector3());
@@ -2607,6 +2610,37 @@ function rlFixGlbMaterials(root,key){
         }
         if(Array.isArray(o.material))o.material[i]=mc;else o.material=mc;
       }
+    }
+  });
+}
+// 道具/地牢结构件 GLB 材质修复：把无光照的 MeshBasicMaterial 换成 PBR，纯白无贴图的染色为石灰色
+function rlFixPropMaterials(root){
+  const stoneTint=new THREE.Color(0x9a9084);
+  root.traverse(o=>{
+    if(!o.isMesh)return;
+    const arr=Array.isArray(o.material)?o.material:[o.material];
+    for(let i=0;i<arr.length;i++){
+      const m=arr[i];if(!m)continue;
+      const hasMap=!!m.map;
+      const col=m.color?m.color.clone():new THREE.Color(0xffffff);
+      let nm;
+      if(m.isMeshBasicMaterial){
+        nm=new THREE.MeshStandardMaterial({
+          color:hasMap?col:stoneTint.clone().multiply(col),
+          map:m.map||null,normalMap:m.normalMap||null,
+          transparent:m.transparent,opacity:m.opacity,alphaTest:m.alphaTest,
+          side:m.side===THREE.DoubleSide?THREE.DoubleSide:THREE.FrontSide,
+          depthWrite:m.depthWrite,roughness:.9,metalness:.02
+        });
+        nm.name=m.name;
+      }else{
+        nm=m;
+        if(nm.color&&!hasMap){
+          const lum=col.r*.299+col.g*.587+col.b*.114;
+          if(lum>.93)nm.color.copy(stoneTint);
+        }
+      }
+      if(Array.isArray(o.material))o.material[i]=nm;else o.material=nm;
     }
   });
 }
@@ -3113,9 +3147,9 @@ function rlAttack(){
     const n=w.hits||1;
     for(let k=0;k<n;k++){
       const sp=(w.spread||0)*(n>1?(k/(n-1)-.5)*2:(Math.random()-.5)*2);
-      const a=yaw+sp,cp=Math.cos(pitch*.6);
+      const a=yaw+sp,cp=Math.cos(pitch),sp2=Math.sin(pitch);
       const dx=-Math.sin(a)*cp,dz=-Math.cos(a)*cp;
-      rlShot({x:P.x+dx*.5,y:1.35+Math.sin(pitch)*.2,z:P.z+dz*.5,vx:dx*w.spd,vz:dz*w.spd,dmg:Math.round(w.d*(1+Math.max(0,RL.atk-1))*(RL.classId==='ranger'&&RL.rangerBuff>0?1.1:1)*RL.damageScale*starDmg),life:w.r*(1+.04*(star-1))/w.spd,pierce:(w.pierce||0)+(star>=3?1:0),aoe:Math.max(w.aoe||0,star>=2?.9+star*.13:0),col:w.col,slow:w.slow||0,star,element:star>=6?'corrosion':star>=5?'fire':star>=4?'electric':star>=3?'bounce':star>=2?'explosive':''});
+      rlShot({x:P.x+dx*.5,y:1.35+sp2*.3,z:P.z+dz*.5,vx:dx*w.spd,vy:sp2*w.spd,vz:dz*w.spd,dmg:Math.round(w.d*(1+Math.max(0,RL.atk-1))*(RL.classId==='ranger'&&RL.rangerBuff>0?1.1:1)*RL.damageScale*starDmg),life:w.r*(1+.04*(star-1))/w.spd,pierce:(w.pierce||0)+(star>=3?1:0),aoe:Math.max(w.aoe||0,star>=2?.9+star*.13:0),col:w.col,slow:w.slow||0,star,element:star>=6?'corrosion':star>=5?'fire':star>=4?'electric':star>=3?'bounce':star>=2?'explosive':''});
     }
     rlMuzzleFx(w.col);
   }else{
@@ -3126,7 +3160,9 @@ function rlAttack(){
       if(w.ls){RL.hp=Math.min(RL.maxHp,RL.hp+w.d*w.ls*2);rlFxRing(P.x,1.4,P.z,.7,0x66ff88,.8)}
     }else{
       rlWeaponSfx(id);
-      rlShot({x:P.x-fx*.1,y:1.35,z:P.z-fz*.1,vx:fx*w.spd,vz:fz*w.spd,dmg:Math.round(w.d*(1+Math.max(0,RL.atk-1))*(RL.classId==='ranger'&&RL.rangerBuff>0?1.1:1)*RL.damageScale*starDmg),life:w.r*(1+.04*(star-1))/w.spd,pierce:star>=3?1:0,aoe:star>=2?.9+star*.13:0,col:w.col,slow:w.slow||0,chain:(w.chain||0)+(star>=3?1:0),star,element:star>=6?'corrosion':star>=5?'fire':star>=4?'electric':star>=3?'bounce':star>=2?'explosive':''});
+      const cp=Math.cos(pitch),sp2=Math.sin(pitch);
+      const dx=-Math.sin(yaw)*cp,dz=-Math.cos(yaw)*cp;
+      rlShot({x:P.x+dx*.1,y:1.35+sp2*.1,z:P.z+dz*.1,vx:dx*w.spd,vy:sp2*w.spd,vz:dz*w.spd,dmg:Math.round(w.d*(1+Math.max(0,RL.atk-1))*(RL.classId==='ranger'&&RL.rangerBuff>0?1.1:1)*RL.damageScale*starDmg),life:w.r*(1+.04*(star-1))/w.spd,pierce:star>=3?1:0,aoe:star>=2?.9+star*.13:0,col:w.col,slow:w.slow||0,chain:(w.chain||0)+(star>=3?1:0),star,element:star>=6?'corrosion':star>=5?'fire':star>=4?'electric':star>=3?'bounce':star>=2?'explosive':''});
       rlMuzzleFx(w.col);
     }
   }
@@ -3136,7 +3172,7 @@ function rlShot(o){
   m.position.set(o.x,o.y,o.z);
   if(o.aoe){const halo=new THREE.Mesh(new THREE.SphereGeometry(.34,8,6),new THREE.MeshBasicMaterial({color:o.col,transparent:true,opacity:.25,blending:THREE.AdditiveBlending,depthWrite:false}));m.add(halo)}
   rlGroup.add(m);
-  RL.shots.push({m,x:o.x,y:o.y,z:o.z,vx:o.vx,vy:0,vz:o.vz,life:o.life,dmg:o.dmg,pierce:o.pierce,aoe:o.aoe,col:o.col,slow:o.slow,chain:o.chain||0,star:o.star||1,element:o.element||'',hit:new Set(),hostile:!!o.hostile,homing:o.homing||0});
+  RL.shots.push({m,x:o.x,y:o.y,z:o.z,vx:o.vx,vy:o.vy||0,vz:o.vz,life:o.life,dmg:o.dmg,pierce:o.pierce,aoe:o.aoe,col:o.col,slow:o.slow,chain:o.chain||0,star:o.star||1,element:o.element||'',hit:new Set(),hostile:!!o.hostile,homing:o.homing||0});
 }
 function rlMuzzle(col){
   const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
@@ -3240,20 +3276,32 @@ function rlBurst(x,y,z,col,count,opts){
     size:opts.size||.25,map:tex,vertexColors:true,transparent:true,opacity:.95,
     blending:opts.blend||THREE.AdditiveBlending,depthWrite:false,fog:false,alphaTest:.01,sizeAttenuation:true
   });
-  const pts=new THREE.Points(geo,mat);pts.frustumCulled=false;rlGroup.add(pts);
+  const pts=new THREE.Points(geo,mat);pts.frustumCulled=false;(opts.parent||rlGroup).add(pts);
   RL.fx.push({m:pts,parts,geo,life:opts.life||.6,t:0,type:'points',gravity:opts.gravity==null?4:opts.gravity,drag:opts.drag||.92,baseSize:opts.size||.25,grow:opts.grow==null?.85:opts.grow,op0:opts.op0==null?.95:opts.op0});
 }
 function rlMuzzleFx(col){
-  const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
-  const mx=P.x+fx*.95,my=1.32,mz=P.z+fz*.95;
+  // 在第一人称枪模型的枪口位置生成火焰，而非角色眼前
+  const mdl=rlGun.userData.model;
+  rlGun.updateMatrixWorld(true);
+  let mp=null;
+  if(mdl&&mdl.userData&&mdl.userData.muzzle){
+    mp=new THREE.Vector3(mdl.userData.muzzle[0],mdl.userData.muzzle[1],mdl.userData.muzzle[2]).applyMatrix4(rlGun.matrixWorld);
+  }else if(mdl){
+    // GLB 武器没有预设枪口偏移：取枪模型包围盒最前端（枪朝向 -Z，即 min.z）作为枪口
+    const bb=new THREE.Box3().setFromObject(rlGun);
+    if(isFinite(bb.min.z))mp=new THREE.Vector3((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,bb.min.z);
+  }
+  if(!mp){return}
+  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(rlGun.getWorldQuaternion(new THREE.Quaternion()));
+  const fx=fwd.x,fz=fwd.z;
   // 枪口焰（沿射向拉伸的火舌）
-  rlBurst(mx,my,mz,0xffd08a,8,{tex:'flame',size:.42,spd:2.4,life:.16,gravity:0,drag:.72,up:.6,dirx:fx*4,dirz:fz*4,grow:1.6});
+  rlBurst(mp.x,mp.y,mp.z,0xffd08a,8,{tex:'flame',size:.42,spd:2.4,life:.16,gravity:0,drag:.72,up:.6,dirx:fx*4,dirz:fz*4,grow:1.6,parent:gunScene});
   // 高温核心火花
-  rlBurst(mx,my,mz,col,12,{tex:'spark',size:.2,spd:5.5,life:.2,gravity:1.5,drag:.86,up:.8,dirx:fx*3,dirz:fz*3});
+  rlBurst(mp.x,mp.y,mp.z,col,12,{tex:'spark',size:.2,spd:5.5,life:.2,gravity:1.5,drag:.86,up:.8,dirx:fx*3,dirz:fz*3,parent:gunScene});
   // 枪口烟
-  rlBurst(mx,my,mz,0x8a8680,4,{tex:'smoke',size:.34,spd:1.1,life:.5,gravity:-.6,drag:.94,up:.9,dirx:fx*2,dirz:fz*2,blend:THREE.NormalBlending,op0:.42});
+  rlBurst(mp.x,mp.y,mp.z,0x8a8680,4,{tex:'smoke',size:.34,spd:1.1,life:.5,gravity:-.6,drag:.94,up:.9,dirx:fx*2,dirz:fz*2,blend:THREE.NormalBlending,op0:.42,parent:gunScene});
   const f=new THREE.Mesh(new THREE.SphereGeometry(.2,10,8),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
-  f.position.set(mx,my,mz);rlGroup.add(f);RL.fx.push({m:f,life:.075,t:0,type:'flash'});
+  f.position.copy(mp);gunScene.add(f);RL.fx.push({m:f,life:.075,t:0,type:'flash'});
 }
 function rlHitBurst(x,y,z,col){
   rlBurst(x,y,z,col,12,{tex:'spark',size:.19,spd:4.5,life:.42,gravity:6.5,drag:.94,up:2.2});
@@ -3287,7 +3335,7 @@ function rlTickFx(dt){
       f.m.material.size=f.baseSize*(1+k*f.grow);
     }
     else{f.m.material.opacity=.9*(1-k);f.m.scale.setScalar(1+k*2)}
-    if(k>=1){rlGroup.remove(f.m);f.m.geometry&&f.m.geometry.dispose&&f.m.geometry.dispose();f.m.material&&f.m.material.dispose&&f.m.material.dispose();RL.fx.splice(i,1)}
+    if(k>=1){if(f.m.parent)f.m.parent.remove(f.m);f.m.geometry&&f.m.geometry.dispose&&f.m.geometry.dispose();f.m.material&&f.m.material.dispose&&f.m.material.dispose();RL.fx.splice(i,1)}
   }
 }
 function rlUpdateShots(dt){
@@ -3298,7 +3346,7 @@ function rlUpdateShots(dt){
     s.x+=s.vx*dt;s.z+=s.vz*dt;s.y+=s.vy*dt;
     s.m.position.set(s.x,s.y,s.z);
     const ti=s.x/T|0,tj=s.z/T|0;
-    let gone=s.life<=0||!maze[tj]||maze[tj][ti]!==0;
+    let gone=s.life<=0||s.y<0||!maze[tj]||(maze[tj][ti]!==0&&s.y<H);
     if(!gone){
       if(s.hostile){
         if(Math.hypot(s.x-P.x,s.z-P.z)<.85&&Math.abs(s.y-1.3)<1.6){rlDamage(s.dmg);gone=true}
@@ -3471,8 +3519,7 @@ function rlTick(dt){
     if(e.burnT>0){e.burnT-=dt;e._burnTick=(e._burnTick||0)-dt;if(e._burnTick<=0){e._burnTick=.55;rlHurt(e,e.burnDmg||0,false,0xff6a2a);rlFxRing(e.x,.45,e.z,.35,0xff4b18,.35)}}
     if(e.corrodeT>0){e.corrodeT-=dt;e._corTick=(e._corTick||0)-dt;if(e._corTick<=0){e._corTick=.7;rlHurt(e,e.corrodeDmg||0,false,0x7dff6a);rlFxRing(e.x,.5,e.z,.42,0x75ff55,.4)}}
     if(e.riseT>0){e.riseT-=dt;e.g.position.y=-1.4*(e.riseT/1.4);continue}
-    if(e.hitT>0){/* 命中不变白，保持原色 */}
-    else{for(let i=0;i<e.mats.length;i++){const mm=e.mats[i];if(mm&&mm.emissive&&e.emis0[i]!=null){mm.emissive.setHex(e.emis0[i]);mm.emissiveIntensity=(e.emis0I[i]||0)}}}
+    // 命中不变白：不修改任何材质颜色/emissive
     if(e.kbX||e.kbZ){
       if(!rlMoveEnemy(e,e.x+e.kbX*dt,e.z+e.kbZ*dt)){e.kbX*=.3;e.kbZ*=.3}
       const damp=Math.pow(.03,dt);e.kbX*=damp;e.kbZ*=damp;
