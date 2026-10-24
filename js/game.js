@@ -3008,7 +3008,7 @@ function rlBuildGun(){
   if(!m)m=mkWeaponModel(w);
   rlGun.add(m);rlGun.userData.model=m;
   // 第一人称拿近点：老旧手枪(g1)与法器(relic)保持原位，其余枪/刀拉近并略抬高
-  rlGun.userData.base=(id!=='g1'&&w.k!=='relic')?[.23,-.24,-.38]:[.30,-.35,-.68];
+  rlGun.userData.base=(id!=='g1'&&w.k!=='relic')?[.23,-.24,-.38]:[.30,-.50,-.68];
   rlGun.userData.spin=(!isGlb&&w.k==='relic')?1:0;
 }
 // 每把武器的朝向/缩放微调表（自动定向后仍不对的在此覆盖）
