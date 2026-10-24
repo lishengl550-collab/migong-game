@@ -592,8 +592,9 @@ function normalOf(tex,strength){
 }
 // ===== 联网写实贴图（Poly Haven CC0 1K，CORS 开放）：加载成功后替换程序化贴图，失败则保留兜底 =====
 const PHB='https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/';
-// 资源路径：用相对路径（GitHub Pages 原生托管），CDN 对中文文件名 GLB 不稳定故不使用
-const AST='';
+// 资源路径：jsDelivr CDN 加速（英文名 GLB 可正常工作），失败自动回退相对路径
+const AST='https://cdn.jsdelivr.net/gh/lishengl550-collab/migong@main/';
+const AST_FB='';
 const pTexLoad=new THREE.TextureLoader();pTexLoad.setCrossOrigin('anonymous');
 const pcache={};
 function photo(url,rx,ry){
@@ -2431,10 +2432,10 @@ function mkBoss(key){
 function mx2(a,b){return a+Math.random()*(b-a)}
 /* ---------- GLB 模型缓存 ---------- */
 const RL_GLB={
-  shade:'幽影游魂',wraith:'疾行鬼影',spider:'蜘蛛头颅',
-  silver:'银龙',thousand:'千手',
-  rot:'腐污尸王',brood:'裂影女鬼母巢',jailer:'锈蚀机械狱卒',
-  bloodmoon:'血月妖祀',void:'虚空怨厄主宰'
+  shade:'shadow_wraith',wraith:'swift_ghost',spider:'spider_head',
+  silver:'silver_dragon',thousand:'thousand_hands',
+  rot:'rot_king',brood:'shadow_brood',jailer:'rust_jailer',
+  bloodmoon:'bloodmoon',void:'void_lord'
 };
 const RL_PROP_GLB={
   crate:'PROP_01_WoodenCrate',barrel:'PROP_02_Barrel',sack:'PROP_03_SackPile',
@@ -2474,9 +2475,9 @@ function rlLoadQueueDrain(){
 }
 function rlLoadOneModelDone(key){rlLoadActive--;rlModelLoading[key]=false;rlLoadQueueDrain();}
 const RL_WEAPON_GLB={
-  torch:null,k1:'铁锈短刀',k2:'断魂长刀',k3:'血纹双刃',k4:'绞魂链刃',k5:'弑神骨锯',
-  g1:'老旧手枪',g2:'霰弹短铳',g3:'战术冲锋枪',g4:'猎魂步枪',g5:'湮灭重炮',
-  r1:'引魂铃',r2:'噬血符',r3:'冰魄晶杖',r4:'雷罚骨珠',r5:'轮回血莲'
+  torch:null,k1:'rust_blade',k2:'soul_reaver',k3:'blood_blade',k4:'soul_chain',k5:'godslayer_saw',
+  g1:'old_pistol',g2:'shotgun',g3:'smg',g4:'soul_rifle',g5:'annihilation_cannon',
+  r1:'soul_bell',r2:'blood_talisman',r3:'ice_staff',r4:'thunder_beads',r5:'blood_lotus'
 };
 const rlWeaponCache={};
 // 贴图预载：在特效触发前就准备好真实粒子贴图
@@ -2492,9 +2493,10 @@ function rlPreloadTextures(){
   for(const k in rlTexPreload){
     const rel='assets/textures/fx/'+rlTexPreload[k]+'.png';
     const tryLoad=(retry)=>{
-      ld.load(AST+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
+      const base=retry>=1?AST_FB:AST;
+      ld.load(base+rel,t=>{t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;rlParticleTex[k]=t},undefined,()=>{
         if(retry<2){tryLoad(retry+1)}
-        else ld.load(AST+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
+        else ld.load(AST_FB+'assets/textures/fx/circle_01.png',t2=>{rlParticleTex[k]=t2},undefined,()=>{});
       });
     };tryLoad(0);
   }
@@ -2506,7 +2508,8 @@ function rlLoadOneModel(key,retry){
   const all=Object.assign({},RL_GLB,RL_PROP_GLB);
   if(all[key]===undefined){rlLoadOneModelDone(key);return;}
   const sub=(RL_GLB[key]!==undefined)?'':'dungeon/';
-  const url=AST+'assets/models/'+sub+all[key]+'.glb';
+  const base=retry>=1?AST_FB:AST;
+  const url=base+'assets/models/'+sub+all[key]+'.glb';
   new THREE.GLTFLoader().load(url,gltf=>{
     rlModelCache[key]=gltf.scene;rlModelAnim[key]=gltf.animations||[];delete rlModelFail[key];
     const box=new THREE.Box3().setFromObject(gltf.scene);
@@ -2987,7 +2990,8 @@ function rlLoadWeaponModel(id,retry){
   const fn=RL_WEAPON_GLB[id];
   if(!fn||rlWeaponCache[id]){rlWeaponLoading[id]=false;return;}
   rlWeaponLoading[id]=true;
-  const url=AST+'assets/models/weapons/'+fn+'.glb';
+  const base=retry>=1?AST_FB:AST;
+  const url=base+'assets/models/weapons/'+fn+'.glb';
   new THREE.GLTFLoader().load(url,g=>{
     rlWeaponCache[id]=g.scene;rlWeaponLoading[id]=false;
     if(RL.active&&RL.bag[RL.slot]===id)rlBuildGun();
