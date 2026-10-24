@@ -1,0 +1,11 @@
+# Windows 系统文件
+desktop.ini
+Thumbs.db
+
+# 资源包附带的非游戏文件
+*.url
+License.txt
+
+# 编辑器
+.vscode/
+.idea/

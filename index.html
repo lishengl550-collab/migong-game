@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7d9fc0"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>低多边形迷宫</title>
+    <link rel="stylesheet" href="css/style.css"></head><body>
+<canvas id="g"></canvas>
+<div id="dot"></div>
+<div id="vg"></div><div id="vig"></div><canvas id="sc" class="hide"></canvas>
+<div id="jb" class="hide"><div id="jk"></div></div>
+<button class="hud" id="fs" aria-label="全屏">⛶</button>
+<div id="toast" class="hud hide"></div>
+<div id="pq"><button class="hud" id="pz" aria-label="暂停">⏸</button><button class="hud" id="qt" aria-label="退出">✕</button><button class="hud" id="mt" aria-label="音乐">♪</button></div>
+<button class="hud" id="fire" aria-label="射击">🔫</button>
+<div class="hud" id="info">⏱ <span id="tm">00:00.0</span><br>💎 <span id="gc">0</span> / <span id="gt">0</span><br>⚡ <span id="ch">6 / 6</span></div>
+<div class="hud" id="mapw"><canvas id="map" width="168" height="168"></canvas></div>
+<div class="hud hide" id="pinfo"></div><div class="hud hide" id="pn"></div>
+<button class="hud hide" id="act" aria-label="互动">🖐</button><button class="hud hide" id="flb" aria-label="手电筒">🔦</button>
+<div class="hud hide" id="code"><div id="cd"></div><button class="sm" id="cok">确认</button><button class="sm" id="cx">取消</button></div>
+<div id="fade"></div>
+<!-- 肉鸽轮回模式 HUD -->
+<div class="hud hide" id="rlhud">🩸 第 <span id="rlf">1</span> 层　<span class="rlcoin">🪙 <span id="rlc">0</span></span><br><span class="rlsub" id="rlm">闯关轮回 · 白给</span></div>
+<div class="hide" id="rlhpwrap"><div id="rlhpbar"><i id="rlhpfill"></i></div><div id="rlhptxt">100 / 100</div></div><div class="hide" id="rlshieldwrap"><i id="rlshieldfill"></i></div><div class="hide" id="rlshieldtxt">🛡 3 / 3</div><button class="hide" id="rlchar" aria-label="角色面板" title="角色面板">👤</button>
+<div class="hide" id="rlweps"><div class="rlslot on" data-s="0"><b>1</b><span>老旧警用手电冲击</span></div><div class="rlslot empty" data-s="1"><b>2</b><span>空</span></div><div class="rlslot empty" data-s="2"><b>3</b><span>空</span></div></div>
+<div class="hide" id="rlbuffs"></div>
+<div class="hide" id="rlboss"><div id="rlbossname"></div><div id="rlbossbar"><i id="rlbossfill"></i></div></div>
+<div id="dmgnums"></div>
+<button class="hide" id="rlswap" aria-label="切换武器">🔁</button><button class="hide" id="rldodge" aria-label="闪避">💨</button><button class="hide" id="rle" aria-label="职业技能 E">E 技能</button><button class="hide" id="rlq" aria-label="终极技能 Q">Q 大招</button>
+<button class="hud hide" id="rlprompt">⛩ 开启祭坛商店</button>
+<div id="rlpanel" class="hide"><div id="rlpanelbox"><h2>♙ 角色面板</h2><div id="rlptabs"><button data-tab="stats" class="on">状态栏</button><button data-tab="weapons">武器栏</button></div><div id="rlpanelcontent"></div><div style="text-align:center;margin-top:12px"><button id="rlpanelclose">返回游戏</button></div></div></div>
+<div id="rlshop" class="hide"><div id="rlsbox"><h2>⛩ 轮回祭坛 · 商店</h2><div class="rssub">用本局星币换取武器与词条。离开后仍可再次打开。</div><div id="rlstock"></div><div id="rlsfoot"><span id="rlscoins">🪙 0</span><button id="rlref">刷新 · 10🪙</button><button id="rlnext">进入下一层</button><button id="rlclose">离开</button></div></div></div>
+<div id="ov"><div id="card"><h1 id="ot"></h1><p id="ox"></p><div id="modes"><button data-m="escape">🏃 逃脱模式</button><button data-m="puzzle">🧩 解谜模式</button><button data-m="roguelike">⛩ 肉鸽轮回</button></div><div id="rlobby" class="hide"><div class="rlrow"><button id="rlmode" class="on">⛩ 闯关轮回</button><button id="rlmode2">♾ 无尽轮回</button><span id="rlfrag">残魂碎片 0</span></div><div id="rlclasses"></div><div id="rlclassdetail"></div><div id="rldiff"></div><div id="rlunlock"></div><div class="rlrow rldetailrow"><button id="rlbtnweapons">🗡 武器详情</button><button id="rlbtnbuffs">✨ 增益详情</button><button id="rlbtnmobs">👹 怪物详情</button></div><div id="rlweapons" class="hide"></div><div id="rlbuffslist" class="hide"></div><div id="rlmobslist" class="hide"></div></div><div id="dif"></div><p id="dd"></p><button id="btn"></button><button id="btn2" class="hide"></button></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+    <script src="js/game.js?v=20261024e"></script></body></html>
